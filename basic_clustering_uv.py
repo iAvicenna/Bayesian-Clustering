@@ -184,13 +184,11 @@ def bayesian_clustering(data, nclusters_fit, conc=1, mu_sigma=10, alpha=2,
                         beta=1, est_centers=None, sample=False):
 
     if est_centers is None:
-        init0 = np.linspace(-np.max(np.abs(data)), np.max(np.abs(data)),
-                            nclusters_fit)
-        init1 = None
-        center_mus = [data.mean(axis=0)[0],  data.mean(axis=0)[1:]]
+        init = [np.linspace(-np.max(np.abs(data)), np.max(np.abs(data)),
+                            nclusters_fit), None]
+        center_mus = [np.sorted(data.mean(axis=0)[0]),  data.mean(axis=0)[1:]]
     else:
-        init0 = est_centers[:,0]
-        init1 = est_centers[:,1:]
+        init = [est_centers[:,0],  est_centers[:,1:]]
         center_mus = [est_centers[:,0], est_centers[:,1:]]
 
     ndims = data.shape[1]
@@ -203,13 +201,13 @@ def bayesian_clustering(data, nclusters_fit, conc=1, mu_sigma=10, alpha=2,
                        sigma=mu_sigma,
                        shape=(nclusters_fit,),
                        transform=pm.distributions.transforms.univariate_ordered,
-                       initval=init0)
+                       initval=init[0])
 
         μ1 = pm.Normal("μ1",
                        mu=center_mus[1],
                        sigma=mu_sigma,
                        shape=(nclusters_fit, ndims-1),
-                       initval=init1)
+                       initval=init[1])
 
         σ = pm.InverseGamma("σ", alpha=alpha, beta=beta)
         weights = pm.Dirichlet("w", conc*np.ones(nclusters_fit))
