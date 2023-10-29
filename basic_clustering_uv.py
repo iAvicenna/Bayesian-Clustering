@@ -170,7 +170,10 @@ def plot(cluster_likelihoods, colors, centers, data,
 
         l = cluster_likelihoods[:,i][:,None]
         color = np.sum(l*colors,axis=0)
-        ax.scatter(data[i,dim0], data[i,dim1], color=color, zorder=0,
+        color[color<0] = 0 #rounding off errors near 0
+        color[color>1] = 1 #rounding off errors near 1
+
+        ax.scatter(data[i,dim0], data[i,dim1], c=color[None,:], zorder=0,
                    edgecolor="black")
         ax.grid("on", alpha=0.2)
 
@@ -183,10 +186,22 @@ def plot(cluster_likelihoods, colors, centers, data,
 def bayesian_clustering(data, nclusters_fit, conc=1, mu_sigma=10, alpha=2,
                         beta=1, est_centers=None, sample=False):
 
+    '''
+    est_centers if supplied must be of shape nclusters_fit, ndims
+    where ndims = data.shape[1]. It is purpose to supply precalculated
+    cluster centers (such as from k-means etc) as guidance to the system.
+    By increasing mu_sigma or decreasing it you can determine how soft the
+    guidance will be (smaller values are more informative and more guidance).
+
+    if sample=True, then sampling will be used for finding parameters if
+    not then MAP
+    '''
+
     if est_centers is None:
         init = [np.linspace(-np.max(np.abs(data)), np.max(np.abs(data)),
                             nclusters_fit), None]
-        center_mus = [np.sorted(data.mean(axis=0)[0]),  data.mean(axis=0)[1:]]
+        center_mus = [init[0],  np.tile(data.mean(axis=0)[1:][:,None],
+                                        (nclusters_fit,1))]
     else:
         init = [est_centers[:,0],  est_centers[:,1:]]
         center_mus = [est_centers[:,0], est_centers[:,1:]]
@@ -220,7 +235,7 @@ def bayesian_clustering(data, nclusters_fit, conc=1, mu_sigma=10, alpha=2,
         pm.Mixture('like', w=weights, comp_dists=components, observed=data)
 
         if sample:
-            trace = pm.sample(draws=4000, chains=6, tune=2000,
+            trace = pm.sample(draws=1000, chains=6, tune=200,
                               target_accept=0.95)
         else:
             MAP = pm.find_MAP()
@@ -249,17 +264,17 @@ def main():
     gmm = mixture.GaussianMixture(n_components=nclusters_fit).fit(data)
     labels_sk = gmm.predict(data)
 
-    sample = True
+    sample = False
 
     if not sample:
         MAP, model = bayesian_clustering(data, nclusters_fit, est_centers=centers_sc,
                                          sample=sample)
         mus = MAP["μ"]
-        cluster_likelihoods = compute_cluster_likelihoods(data, model, MAP=MAP)
+        cluster_likelihoods = compute_cluster_likelihoods(data, MAP=MAP)
 
     else:
         trace, model = bayesian_clustering(data, nclusters_fit, est_centers=centers_sc,
-                                           sample=sample, mu_sigma=5)
+                                           sample=sample, mu_sigma=10)
         mus = np.reshape(az.summary(trace, var_names="μ").iloc[:,0].values,
                          (nclusters, ndims))
         pps = sample_cluster_likelihoods(model, nclusters_fit, data, trace)
@@ -273,6 +288,7 @@ def main():
 
     colors = np.array([[1,0,0],[0,0,1],[0,1,0],[1,1,0], [0,0,0],
                        [1,1,1]])[:nclusters_fit,:]
+
 
     plot(cluster_likelihoods, colors, mus, data)
 
